@@ -222,7 +222,7 @@ function injectVideoFeedButtons(stories, downloadStory) {
  */
 function injectWatchVideoButtons(stories, downloadStory) {
   const actionButtons = document.querySelectorAll(
-    '[aria-label="More options for video"]',
+    '[aria-label*="More options"]',
   );
 
   for (const actionBtn of actionButtons) {
@@ -425,71 +425,71 @@ function injectInstagramButtons(stories, downloadStory) {
   if (!window.location.hostname.includes("instagram.com")) return;
 
   // 1. Feed Posts (articles) - skip on home feed
-  if (window.location.pathname !== '/') {
+  if (window.location.pathname !== "/") {
     const articles = document.querySelectorAll("article");
     for (const article of articles) {
-    // 1. From the timestamp link (most reliable)
-    let shortcode = "";
-    const timeLink = article.querySelector("time")?.closest("a");
-    if (timeLink) {
-      const href = timeLink.getAttribute("href") || "";
-      const match = href.match(/\/(?:p|reels|reel)\/([A-Za-z0-9_-]+)/);
-      if (match) shortcode = match[1];
-    }
-
-    if (!shortcode) {
-      const link = article.querySelector(
-        'a[href*="/p/"], a[href*="/reels/"], a[href*="/reel/"]',
-      );
-      if (link) {
-        const href = link.getAttribute("href") || "";
+      // 1. From the timestamp link (most reliable)
+      let shortcode = "";
+      const timeLink = article.querySelector("time")?.closest("a");
+      if (timeLink) {
+        const href = timeLink.getAttribute("href") || "";
         const match = href.match(/\/(?:p|reels|reel)\/([A-Za-z0-9_-]+)/);
         if (match) shortcode = match[1];
       }
-    }
 
-    if (!shortcode) {
-      shortcode = getValueFromReactFiber(
-        article,
-        (p) => p?.shortcode || p?.code || p?.post?.code,
-      );
-    }
-
-    if (!shortcode) continue;
-
-    // Check if button already exists and if it's a placeholder
-    const existingBtn = article.querySelector(
-      `.fpdl-download-btn[data-shortcode="${shortcode}"]`,
-    );
-    const isPlaceholder = existingBtn?.dataset.placeholder === "true";
-
-    const story = stories.find((s) => getStoryPostId(s) === shortcode) || {
-      id: shortcode,
-      shortcode: shortcode,
-      __typename: "InstagramStory",
-      placeholder: true,
-    };
-
-    if (existingBtn) {
-      if (isPlaceholder && !story.placeholder) {
-        // Upgrade placeholder to real story button
-        existingBtn.remove();
-      } else {
-        continue;
+      if (!shortcode) {
+        const link = article.querySelector(
+          'a[href*="/p/"], a[href*="/reels/"], a[href*="/reel/"]',
+        );
+        if (link) {
+          const href = link.getAttribute("href") || "";
+          const match = href.match(/\/(?:p|reels|reel)\/([A-Za-z0-9_-]+)/);
+          if (match) shortcode = match[1];
+        }
       }
+
+      if (!shortcode) {
+        shortcode = getValueFromReactFiber(
+          article,
+          (p) => p?.shortcode || p?.code || p?.post?.code,
+        );
+      }
+
+      if (!shortcode) continue;
+
+      // Check if button already exists and if it's a placeholder
+      const existingBtn = article.querySelector(
+        `.fpdl-download-btn[data-shortcode="${shortcode}"]`,
+      );
+      const isPlaceholder = existingBtn?.dataset.placeholder === "true";
+
+      const story = stories.find((s) => getStoryPostId(s) === shortcode) || {
+        id: shortcode,
+        shortcode: shortcode,
+        __typename: "InstagramStory",
+        placeholder: true,
+      };
+
+      if (existingBtn) {
+        if (isPlaceholder && !story.placeholder) {
+          // Upgrade placeholder to real story button
+          existingBtn.remove();
+        } else {
+          continue;
+        }
+      }
+
+      const actionRow =
+        article.querySelector("section") || article.querySelector(".xh8yej3");
+      if (!actionRow) continue;
+
+      const downloadBtn = createDownloadButton(story, downloadStory);
+      downloadBtn.setAttribute("data-shortcode", shortcode);
+      if (story.placeholder) downloadBtn.dataset.placeholder = "true";
+      downloadBtn.style.marginLeft = "8px";
+
+      actionRow.appendChild(downloadBtn);
     }
-
-    const actionRow =
-      article.querySelector("section") || article.querySelector(".xh8yej3");
-    if (!actionRow) continue;
-
-    const downloadBtn = createDownloadButton(story, downloadStory);
-    downloadBtn.setAttribute("data-shortcode", shortcode);
-    if (story.placeholder) downloadBtn.dataset.placeholder = "true";
-    downloadBtn.style.marginLeft = "8px";
-
-    actionRow.appendChild(downloadBtn);
-  }
   }
 
   // 2. Reels (fullscreen viewer)
@@ -581,9 +581,9 @@ function injectDownloadButtonStyles() {
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            border: none;
+            border: 1px solid rgba(255, 255, 255, 1);
             background: transparent;
-            color: inherit;
+            color: #006aceff;
             cursor: pointer;
             padding: 0;
             transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -633,9 +633,11 @@ function injectDownloadButtonStyles() {
             width: 48px;
             height: 36px;
             border-radius: 8px;
+            color: white;
+            background: #1877f2;
         }
         .fpdl-download-btn--watch:hover {
-             background: rgba(59, 130, 246, 0.15);
+             background: #166fe5;
         }
         .fpdl-download-btn--instagram {
             color: inherit;

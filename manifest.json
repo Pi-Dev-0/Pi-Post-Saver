@@ -22,7 +22,7 @@
         "https://www.instagram.com/*",
         "https://instagram.com/*"
       ],
-      "run_at": "document_start"
+      "run_at": "document_idle"
     }
   ],
   "description": "Download Social Media posts, including text, images, and videos.",
