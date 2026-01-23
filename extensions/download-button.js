@@ -424,75 +424,7 @@ function injectReelsButtons(stories, downloadStory) {
 function injectInstagramButtons(stories, downloadStory) {
   if (!window.location.hostname.includes("instagram.com")) return;
 
-  // 1. Feed Posts (articles) - skip on home feed
-  if (window.location.pathname !== "/") {
-    const articles = document.querySelectorAll("article");
-    for (const article of articles) {
-      // 1. From the timestamp link (most reliable)
-      let shortcode = "";
-      const timeLink = article.querySelector("time")?.closest("a");
-      if (timeLink) {
-        const href = timeLink.getAttribute("href") || "";
-        const match = href.match(/\/(?:p|reels|reel)\/([A-Za-z0-9_-]+)/);
-        if (match) shortcode = match[1];
-      }
-
-      if (!shortcode) {
-        const link = article.querySelector(
-          'a[href*="/p/"], a[href*="/reels/"], a[href*="/reel/"]',
-        );
-        if (link) {
-          const href = link.getAttribute("href") || "";
-          const match = href.match(/\/(?:p|reels|reel)\/([A-Za-z0-9_-]+)/);
-          if (match) shortcode = match[1];
-        }
-      }
-
-      if (!shortcode) {
-        shortcode = getValueFromReactFiber(
-          article,
-          (p) => p?.shortcode || p?.code || p?.post?.code,
-        );
-      }
-
-      if (!shortcode) continue;
-
-      // Check if button already exists and if it's a placeholder
-      const existingBtn = article.querySelector(
-        `.fpdl-download-btn[data-shortcode="${shortcode}"]`,
-      );
-      const isPlaceholder = existingBtn?.dataset.placeholder === "true";
-
-      const story = stories.find((s) => getStoryPostId(s) === shortcode) || {
-        id: shortcode,
-        shortcode: shortcode,
-        __typename: "InstagramStory",
-        placeholder: true,
-      };
-
-      if (existingBtn) {
-        if (isPlaceholder && !story.placeholder) {
-          // Upgrade placeholder to real story button
-          existingBtn.remove();
-        } else {
-          continue;
-        }
-      }
-
-      const actionRow =
-        article.querySelector("section") || article.querySelector(".xh8yej3");
-      if (!actionRow) continue;
-
-      const downloadBtn = createDownloadButton(story, downloadStory);
-      downloadBtn.setAttribute("data-shortcode", shortcode);
-      if (story.placeholder) downloadBtn.dataset.placeholder = "true";
-      downloadBtn.style.marginLeft = "8px";
-
-      actionRow.appendChild(downloadBtn);
-    }
-  }
-
-  // 2. Reels (fullscreen viewer)
+  // Only inject for Reels (fullscreen viewer)
   const reels = document.querySelectorAll(
     'div[role="dialog"] video, main video',
   );
@@ -503,8 +435,8 @@ function injectInstagramButtons(stories, downloadStory) {
 
     let shortcode;
     const match = window.location.pathname.match(
-      /\/(?:reels|reel|p)\/([A-Za-z0-9_-]+)/,
-    );
+      /\/(?:reels|reel)\/([A-Za-z0-9_-]+)/,
+    ); // Changed regex to only match reels/reel, not /p/
     if (match && isActiveReel(container)) {
       shortcode = match[1];
     } else {
@@ -515,6 +447,12 @@ function injectInstagramButtons(stories, downloadStory) {
     }
 
     if (!shortcode) continue;
+
+    // Ensure it's explicitly a reel URL, not a generic post if shortcode came from elsewhere
+    // This check reinforces that we only process reel-like URLs
+    if (!window.location.pathname.includes("/reels/") && !window.location.pathname.includes("/reel/")) {
+        continue;
+    }
 
     const existingBtn = container.querySelector(
       `.fpdl-download-btn[data-shortcode="${shortcode}"]`,

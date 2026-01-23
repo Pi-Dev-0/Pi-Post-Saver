@@ -290,7 +290,7 @@ async function* fetchAttachments(story) {
     // Handle Instagram placeholder (fetch on download)
     if (s.placeholder && s.shortcode) {
       try {
-        // Try to extract from page DOM first
+        // Step 1: Try to extract from page DOM first (existing logic)
         const articles = document.querySelectorAll("article");
         for (const article of articles) {
           const link = article.querySelector(
@@ -351,8 +351,7 @@ async function* fetchAttachments(story) {
           }
         }
 
-        // 1. Try to find in cache or embedded data first
-        // Check our global cache of intercepted stories
+        // Step 2: Try to find in cache or embedded data first
         const cached = globalStoriesCache.get(s.shortcode);
         if (cached && !cached.placeholder) {
           console.log(
@@ -362,7 +361,6 @@ async function* fetchAttachments(story) {
           return;
         }
 
-        // We also do a fresh extraction here to catch anything new from scrolling
         const embedded = extractEmbeddedStories();
         const found = embedded.find(
           (story) =>
@@ -377,11 +375,45 @@ async function* fetchAttachments(story) {
           return;
         }
 
-        // 3. Last ditch: deep scan all script tags for any JSON mentioning this shortcode
+        // Step 3: Fetch the HTML page and parse meta tags
+        const instagramUrl = `https://www.instagram.com/p/${s.shortcode}/`;
         console.log(
-          `[fpdl] Placeholder ${s.shortcode} not found in cache/embedded. Performing deep scan...`,
+          `[fpdl] Placeholder ${s.shortcode} not found in cache/embedded. Fetching ${instagramUrl}...`,
         );
-        const allScripts = document.querySelectorAll("script:not([src])");
+
+        const res = await fetch(instagramUrl);
+        if (!res.ok) {
+          throw new Error(`Failed to fetch Instagram page: HTTP ${res.status}`);
+        }
+        const html = await res.text();
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+
+        const ogVideoMeta = doc.querySelector('meta[property="og:video"]');
+        const ogImageMeta = doc.querySelector('meta[property="og:image"]');
+
+        if (ogVideoMeta && ogVideoMeta.content) {
+          console.log(
+            `[fpdl] Resolved placeholder ${s.shortcode} from og:video meta tag.`,
+          );
+          yield { __typename: "Video", video_url: ogVideoMeta.content };
+          return;
+        }
+        if (ogImageMeta && ogImageMeta.content) {
+          console.log(
+            `[fpdl] Resolved placeholder ${s.shortcode} from og:image meta tag.`,
+          );
+          yield { __typename: "Photo", display_url: ogImageMeta.content };
+          return;
+        }
+
+
+        // Fallback: Deep scan script tags if meta tags don't provide media
+        console.log(
+          `[fpdl] No media in meta tags for ${s.shortcode}. Performing deep script scan...`,
+        );
+        const allScripts = doc.querySelectorAll("script:not([src])");
         for (const script of allScripts) {
           const text = script.textContent || "";
           if (text.includes(s.shortcode)) {
@@ -394,7 +426,6 @@ async function* fetchAttachments(story) {
                 text.includes("GraphVideo") ||
                 text.includes("GraphImage")
               ) {
-                // Try to find any JSON-like structures in the text
                 const matches = text.match(/\{"__typename":"[A-Za-z]+",.*?\}/g);
                 if (matches) {
                   for (const m of matches) {
@@ -424,57 +455,8 @@ async function* fetchAttachments(story) {
           }
         }
 
-        console.warn(
-          `[fpdl] Placeholder ${s.shortcode} not found in cache/embedded. Cache keys:`,
-          Array.from(globalStoriesCache.keys()).slice(0, 10),
-          "Falling back to fetch...",
-        );
-
-        // 2. Try fetching from Instagram's JSON endpoints
-        // We try /reels/ first, then /p/ as a fallback for 404s
-        const paths = [`/reels/${s.shortcode}/`, `/p/${s.shortcode}/`];
-        let data = null;
-        let lastError = null;
-
-        for (const path of paths) {
-          const url = `https://www.instagram.com${path}?__a=1&__d=dis`;
-          try {
-            const res = await fetch(url, {
-              headers: {
-                "X-Requested-With": "XMLHttpRequest",
-              },
-            });
-
-            if (res.status === 404) {
-              lastError = `404 at ${url}`;
-              continue; // Try next path
-            }
-            if (!res.ok) throw new Error(`HTTP ${res.status} at ${url}`);
-
-            const contentType = res.headers.get("content-type") || "";
-            if (!contentType.includes("json")) {
-              lastError = `Non-JSON response (${contentType}) at ${url}`;
-              continue;
-            }
-
-            data = await res.json();
-            if (data) break;
-          } catch (e) {
-            console.warn(`[fpdl] Failed to fetch from ${url}`, e);
-            lastError = e.message;
-          }
-        }
-
-        if (data) {
-          const item = data.items?.[0] || data.graphql?.shortcode_media;
-          if (item) {
-            yield* fetchAttachments(item);
-            return;
-          }
-        }
-
         throw new Error(
-          `Could not find media data in placeholder response. Last error: ${lastError}`,
+          `Could not find media data for Instagram placeholder ${s.shortcode}`,
         );
       } catch (err) {
         console.warn("[fpdl] Failed to fetch instagram placeholder", err);
