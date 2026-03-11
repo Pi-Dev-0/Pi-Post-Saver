@@ -675,9 +675,9 @@ function injectDownloadButtonStyles() {
              background: #166fe5;
         }
         .fpdl-download-btn--instagram-header {
-            color: inherit;
+            color: #006aceff;
             opacity: 0.8;
-            border: none;
+            border: 1px solid white;
             width: 40px;
             height: 40px;
             background: transparent;
