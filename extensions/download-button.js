@@ -1,4 +1,4 @@
-import { getStoryUrl, getStoryId, getStoryPostId } from "./story.js";
+import { getStoryUrl, getStoryId, getStoryPostId } from "./facebook/story.js";
 import { React } from "./react.js";
 
 /**
@@ -6,6 +6,15 @@ import { React } from "./react.js";
  */
 
 const { useEffect } = React;
+
+/**
+ * Module-level stories registry — always holds the latest stories from React state.
+ * Needed because injectStoryButtons injects one persistent button per controlBar
+ * and never replaces it, making the closure's `stories` reference stale after
+ * subsequent React renders. This variable is updated on every render.
+ * @type {import('./types').Story[]}
+ */
+let _currentStories = [];
 
 /**
  * Check if a container is the "active" reel in the viewport.
@@ -269,20 +278,28 @@ function injectWatchVideoButtons(stories, downloadStory) {
  * @param {(story: Story) => Promise<void>} downloadStory
  */
 function injectReelsButtons(stories, downloadStory) {
+  const isReelPage = window.location.pathname.includes("/reel/");
   const match = window.location.pathname.match(/\/reel\/(\d+)/);
-  if (!match) return;
-  const reelId = match[1];
+  const reelId = match ? match[1] : null;
 
-  const potentialContainers = document.querySelectorAll(".x1useyqa, .xpdmqnj");
+  // Broad container search for anything that looks like a Reel player or viewer
+  const potentialContainers = document.querySelectorAll(
+    ".x1useyqa, .xpdmqnj, div[role='main'] .x1yztbdb, .x1yztbdb, .x1qjc9v5.x9f619, div[aria-label='Reels Viewer']",
+  );
 
   for (const container of potentialContainers) {
+    // Look for any standard Facebook action button to anchor next to
     const likeBtn = container.querySelector('[aria-label="Like"]');
     const commentBtn = container.querySelector('[aria-label="Comment"]');
-    const anchorBtn = likeBtn || commentBtn;
+    const shareBtn = container.querySelector(
+      '[aria-label="Send this to a friend or post on your timeline."], [aria-label="Share"], [aria-label="Send in Messenger"]',
+    );
+    const anchorBtn = likeBtn || commentBtn || shareBtn;
 
     if (!anchorBtn) continue;
     if (container.querySelector(".fpdl-download-btn-reel")) continue;
 
+    // Try multiple ways to get the ID from React Fiber
     let extractedId =
       getValueFromReactFiber(
         anchorBtn,
@@ -295,26 +312,20 @@ function injectReelsButtons(stories, downloadStory) {
           p?.feedback?.video_view_count_renderer?.feedback
             ?.associated_group_video?.id,
         50,
-      );
-
-    if (!extractedId) {
-      extractedId = getValueFromReactFiber(
+      ) ||
+      getValueFromReactFiber(
         anchorBtn,
         (p) => p?.videoID || p?.storyPostID || p?.upvoteInput?.storyID,
         50,
-      );
-    }
-
-    if (!extractedId) {
-      extractedId = getValueFromReactFiber(
+      ) ||
+      getValueFromReactFiber(
         anchorBtn,
         (p) => p?.feedback?.associated_video?.id,
         50,
       );
-    }
 
     let effectiveId = extractedId;
-    if (!effectiveId && isActiveReel(container)) {
+    if (!effectiveId && (isReelPage || isActiveReel(container))) {
       effectiveId = reelId;
     }
 
@@ -493,19 +504,27 @@ function injectStoryButtons(stories, downloadStory) {
   for (const anchor of anchors) {
     // Only target anchors that are part of the visible story viewer
     if (anchor.offsetHeight === 0 || anchor.closest('[hidden]')) continue;
-    
+
     // Skip the global menu in the top-right corner
     if (anchor.closest('[aria-label="Account Controls and Settings"]')) continue;
 
-    // The controls are usually grouped in a container. 
-    // We check if we already injected into this container.
+    // The controls are usually grouped in a container.
     const controlBar = anchor.closest('.x78zum5.xtijo5x') || anchor.parentElement;
-    if (!controlBar || controlBar.querySelector(".fpdl-download-btn-story")) {
-      continue;
-    }
+    if (!controlBar) continue;
+
+    // One button per controlBar is sufficient.
+    //
+    // KEY INSIGHT: Facebook does NOT update the browser URL bar when the user navigates
+    // between stories inside a bucket. This means we CANNOT use the URL to determine
+    // which story is currently visible. Instead:
+    //  - We inject ONE button per controlBar (never replace it).
+    //  - When clicked, the button reads React fiber props FRESH at that moment to
+    //    discover which story is currently on screen.
+    // This guarantees the correct story is always downloaded regardless of URL.
+    if (controlBar.querySelector(".fpdl-download-btn-story")) continue;
 
     /**
-     * Check if a string is likely a Facebook ID.
+     * Check if a value looks like a Facebook story / bucket ID.
      * @param {any} val
      * @returns {boolean}
      */
@@ -516,49 +535,241 @@ function injectStoryButtons(stories, downloadStory) {
       return /^\d{10,}$/.test(val) || val.startsWith("Uzpf") || val.includes(":");
     };
 
-    // 1. Try to find the active story ID and bucket ID from the React props of the anchor button
-    /** @type {{sid: string, bid?: string} | null} */
-    const fbData = getValueFromReactFiber(anchor, (p) => {
-      const bid = p?.bucketID || p?.ownerID || p?.bucketId || p?.story?.owner?.id || p?.owner?.id;
-      
-      // Look for specific story IDs
-      const sid = p?.storyCard?.id || p?.story_card_id || p?.storyCard?.story_card_id || p?.story?.id || p?.id;
-      if (isLikelyFbId(sid) && String(sid) !== String(bid)) {
-         return { sid: String(sid), bid: bid ? String(bid) : undefined };
+    /**
+     * Resolve the story CURRENTLY visible in the viewer.
+     * Called at CLICK TIME so it always reflects the active story even when
+     * Facebook navigates stories without updating the browser URL.
+     *
+     * Tries multiple strategies in order:
+     *  1. React fiber on several DOM elements near the story viewer
+     *  2. /stories/bucket/storyId links found in the DOM (hidden links)
+     *  3. Progress bar position → index into known ordered stories list
+     *  4. URL fallback (stale, but covers the first story and edge cases)
+     *
+     * @returns {{ id: string, bucketId?: string, __typename: string, placeholder: boolean } | null}
+     */
+    const resolveCurrentStory = () => {
+      /**
+       * Try to read { sid, bid } from the fiber ancestor chain of a DOM element.
+       * @param {Element | null | undefined} el
+       */
+      const extractFiber = (el) => {
+        if (!el) return null;
+        return getValueFromReactFiber(el, (p) => {
+          const bid =
+            p?.bucketID || p?.ownerID || p?.bucketId ||
+            p?.story?.owner?.id || p?.owner?.id ||
+            p?.bucket?.id || p?.bucket_id;
+
+          // Extended prop paths — different FB components use different names
+          const sid =
+            p?.storyCard?.id ||
+            p?.story_card_id ||
+            p?.storyCard?.story_card_id ||
+            p?.focusedStoryCardId ||
+            p?.activeStoryId ||
+            p?.currentStoryId ||
+            p?.storyId ||
+            p?.story_id ||
+            p?.story?.id ||
+            p?.card?.id ||
+            p?.focusedCardId ||
+            p?.id;
+
+          if (isLikelyFbId(sid) && String(sid) !== String(bid)) {
+            return { sid: String(sid), bid: bid ? String(bid) : undefined };
+          }
+          if (isLikelyFbId(sid)) {
+            return { sid: String(sid), bid: bid ? String(bid) : undefined };
+          }
+          return undefined;
+        });
+      };
+
+      // ── Strategy 1: Fiber on multiple DOM candidates ─────────────────────
+      // Walk up from controlBar and also search known story-content elements.
+      const domCandidates = [
+        // Controls (original approach)
+        controlBar.querySelector('div[aria-label="Mute"]'),
+        controlBar.querySelector('div[aria-label="Menu"]'),
+        anchor,
+        // Story content (image / video)
+        document.querySelector('video'),
+        document.querySelector('[role="img"][aria-label]'),  // story image
+        // Progress bars (story position indicator)
+        document.querySelector('[role="progressbar"]'),
+        // Walk up from controlBar — story context may be a few levels up
+        controlBar.parentElement,
+        controlBar.parentElement?.parentElement,
+        controlBar.parentElement?.parentElement?.parentElement,
+        controlBar.parentElement?.parentElement?.parentElement?.parentElement,
+      ];
+
+      for (const el of domCandidates) {
+        const data = extractFiber(/** @type {Element} */ (el));
+        if (data?.sid) {
+          console.log(`[fpdl] resolveCurrentStory: found via fiber on ${/** @type {Element} */(el)?.tagName ?? "el"}: ${data.sid}`);
+          let bucketId = data.bid;
+          if (!bucketId) {
+            const m = window.location.href.match(/facebook\.com\/stories\/([^/?#]+)/);
+            if (m) bucketId = m[1];
+          }
+          const sStoryId = String(data.sid);
+          const known = _currentStories.find((s) => getStoryId(s) === sStoryId);
+          if (known) return known;
+          return { id: sStoryId, bucketId, __typename: "Story", placeholder: true };
+        }
       }
 
-      // Generic ID fallback
-      if (isLikelyFbId(sid)) {
-         return { sid: String(sid), bid: bid ? String(bid) : undefined };
+      // ── Strategy 2: /stories/ links in the DOM ───────────────────────────
+      // Facebook sometimes embeds story links as hidden anchors with the full URL.
+      {
+        const links = document.querySelectorAll('a[href*="/stories/"]');
+        for (const link of links) {
+          if (/** @type {HTMLElement} */(link).offsetHeight === 0 &&
+              /** @type {HTMLElement} */(link).offsetWidth === 0) continue; // skip truly hidden
+          const href = link.getAttribute("href") || "";
+          const m = href.match(/\/stories\/([^/?#]+)\/([^/?#]+)/);
+          if (m && isLikelyFbId(m[2])) {
+            const bucketId = m[1];
+            const storyId = decodeURIComponent(m[2]);
+            console.log(`[fpdl] resolveCurrentStory: found via DOM link: ${storyId}`);
+            const known = _currentStories.find((s) => getStoryId(s) === storyId);
+            if (known) return known;
+            return { id: storyId, bucketId, __typename: "Story", placeholder: true };
+          }
+        }
       }
 
-      return undefined;
-    });
+      // ── Strategy 3: Progress bar position → known story index ────────────
+      // Facebook Stories render a row of progress bars — one per story in the
+      // bucket. The bar currently being filled/animated is the active story.
+      // If we know the ordered list of stories for this bucket, we can match
+      // by index.
+      {
+        const urlM = window.location.href.match(/facebook\.com\/stories\/([^/?#]+)/);
+        const bucketId = urlM ? urlM[1] : null;
 
-    let storyId = fbData?.sid;
-    const bucketId = fbData?.bid;
+        if (bucketId && stories.length > 0) {
+          const bucketStories = stories.filter((s) => {
+            // Filter stories that belong to this bucket (if we have bucketId info)
+            const sAny = /** @type {any} */ (s);
+            return (
+              sAny.bucketId === bucketId ||
+              sAny.bucket_id === bucketId ||
+              sAny.owner?.id === bucketId
+            );
+          });
 
-    // 2. Fallback to URL if React props don't have it
-    if (!storyId) {
-      const match = window.location.href.match(/facebook\.com\/stories\/(\d+)(?:\/(\d+))?/);
-      storyId = match ? (match[2] || match[1]) : undefined;
-    }
+          const progressBars = Array.from(
+            document.querySelectorAll('[role="progressbar"]')
+          );
 
-    if (!storyId) continue;
+          if (progressBars.length > 0) {
+            // Find the index of the active bar: the first one that is animating
+            // (width > 0 but not fully complete, or has an inner animated element).
+            let activeIdx = -1;
+            for (let i = 0; i < progressBars.length; i++) {
+              const bar = progressBars[i];
+              const inner = bar.querySelector("[style]");
+              const widthStr =
+                inner?.style?.width ||
+                window.getComputedStyle(bar).width;
+              const pct = parseFloat(widthStr);
+              // Heuristic: the first bar that is > 0% and < 100% is the active one.
+              // If all are 0 the first is active; if all done the last is active.
+              if (pct > 0 && pct < 100) {
+                activeIdx = i;
+                break;
+              }
+            }
+            if (activeIdx === -1) {
+              // Check aria-valuenow
+              for (let i = 0; i < progressBars.length; i++) {
+                const now = parseFloat(progressBars[i].getAttribute("aria-valuenow") || "0");
+                const max = parseFloat(progressBars[i].getAttribute("aria-valuemax") || "100");
+                if (now > 0 && now < max) { activeIdx = i; break; }
+              }
+            }
+            // Default to the last bar whose aria-valuenow > 0
+            if (activeIdx === -1) {
+              for (let i = progressBars.length - 1; i >= 0; i--) {
+                const now = parseFloat(progressBars[i].getAttribute("aria-valuenow") || "0");
+                if (now > 0) { activeIdx = i; break; }
+              }
+            }
 
-    const sStoryId = String(storyId);
-    const story = stories.find((s) => getStoryId(s) === sStoryId) || { 
-      id: sStoryId, 
-      bucketId: bucketId,
-      __typename: "Story", 
-      placeholder: true 
+            const targetList = bucketStories.length > 0 ? bucketStories : stories;
+            if (activeIdx >= 0 && activeIdx < targetList.length) {
+              const s = targetList[activeIdx];
+              console.log(`[fpdl] resolveCurrentStory: found via progress bar [${activeIdx}]: ${getStoryId(s)}`);
+              return s;
+            }
+          }
+        }
+      }
+
+      // ── Strategy 4: URL fallback ─────────────────────────────────────────
+      // The URL may be stale (always shows first story), but it's better than nothing.
+      {
+        const urlM = window.location.href.match(
+          /facebook\.com\/stories\/([^/?#]+)(?:\/([^/?#]+))?/
+        );
+        if (urlM) {
+          const bucketId = urlM[1];
+          const storyId = urlM[2] ? decodeURIComponent(urlM[2]) : urlM[1];
+          console.warn(`[fpdl] resolveCurrentStory: falling back to URL (may be stale): ${storyId}`);
+          const known = _currentStories.find((s) => getStoryId(s) === storyId);
+          if (known) return known;
+          return { id: storyId, bucketId, __typename: "Story", placeholder: true };
+        }
+      }
+
+      console.warn("[fpdl] resolveCurrentStory: all strategies exhausted, cannot resolve story.");
+      return null;
     };
 
-    const downloadBtn = createDownloadButton(story, downloadStory);
-    downloadBtn.classList.add("fpdl-download-btn-story");
+    // Create the download button.
+    // Its click handler calls resolveCurrentStory() each time, so navigating
+    // to a different story (without URL change) still downloads the right one.
+    const btn = document.createElement("button");
+    btn.className = "fpdl-download-btn fpdl-download-btn-story";
+    btn.setAttribute("aria-label", "Download Facebook story");
+    btn.innerHTML = `
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+        <path d="M12 3c.55 0 1 .45 1 1v9.59l2.3-2.3a1.003 1.003 0 0 1 1.42 1.42l-4 4a1 1 0 0 1-1.42 0l-4-4a1.003 1.003 0 0 1 1.42-1.42l2.28 2.3V4c0-.55.45-1 1-1zm-7 16c-.55 0-1 .45-1 1s.45 1 1 1h14c.55 0 1-.45 1-1s-.45-1-1-1H5z"/>
+      </svg>
+    `;
 
-    // Insert at the beginning of the control group
-    controlBar.insertBefore(downloadBtn, controlBar.firstChild);
+    let downloading = false;
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (downloading) return;
+      downloading = true;
+      btn.style.opacity = "0.5";
+      btn.style.cursor = "wait";
+
+      try {
+        // Resolve which story is on screen RIGHT NOW, at click time.
+        const story = resolveCurrentStory();
+        if (story) {
+          await downloadStory(story);
+        } else {
+          console.warn("[fpdl] Cannot download: could not resolve the currently visible story.");
+        }
+      } catch (err) {
+        console.warn("[fpdl] Story download failed", err);
+      } finally {
+        downloading = false;
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+      }
+    });
+
+    // Insert at the beginning of the control group.
+    controlBar.insertBefore(btn, controlBar.firstChild);
   }
 }
 
@@ -788,6 +999,10 @@ function injectDownloadButtonStyles() {
  * @param {(story: Story) => Promise<void>} downloadStory
  */
 export function useDownloadButtonInjection(stories, downloadStory) {
+  // Keep module-level registry fresh on every render so the persistent story
+  // download button always resolves against the latest story list.
+  _currentStories = stories;
+
   useEffect(() => {
     injectDownloadButtonStyles();
   }, []);

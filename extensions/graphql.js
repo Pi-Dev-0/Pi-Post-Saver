@@ -44,6 +44,14 @@ const DOC_ID_MODULES = {
     moduleName: "StoriesViewerBucketPrefetcherMultiBucketsQuery_facebookRelayOperation",
     fallbackDocId: "9340191609394579",
   },
+  ClubsVideoPlayerRootQuery: {
+    moduleName: "ClubsVideoPlayerRootQuery_facebookRelayOperation",
+    fallbackDocId: "6487824887961234",
+  },
+  CometReelMediaViewerQuery: {
+    moduleName: "CometReelMediaViewerQuery_facebookRelayOperation",
+    fallbackDocId: "7185078178184498",
+  },
 };
 
 /**
@@ -98,6 +106,16 @@ const DEFAULT_VARIABLES = {
     shouldDeferLoad: false,
     isStoriesArchive: false,
     __relay_internal__pv__IsWorkUserrelayprovider: false,
+  },
+  ClubsVideoPlayerRootQuery: {
+    scale: 3,
+    useDefaultActor: false,
+    __relay_internal__pv__GHLShouldChangeSponsoredDataFieldNamerelayprovider: true,
+  },
+  CometReelMediaViewerQuery: {
+    scale: 3,
+    useDefaultActor: false,
+    __relay_internal__pv__GHLShouldChangeSponsoredDataFieldNamerelayprovider: true,
   },
 };
 

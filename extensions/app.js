@@ -1,15 +1,9 @@
-import {
-  storyListener,
-  fetchStoryFiles,
-  getAttachmentCount,
-  getDownloadCount,
-  getCreateTime,
-  isStoryPost,
-  getStoryPostId,
-  getStoryMessage,
-  getStoryId,
-  isInstagramStory,
-} from "./story.js";
+import { storyListener } from "./facebook/facebook.js";
+import { fetchStoryFiles } from "./facebook/story.js";
+import { getAttachmentCount, getDownloadCount } from "./facebook/posts.js";
+import { isStoryPost, getStoryPostId, getStoryMessage, getStoryId, getCreateTime } from "./facebook/story.js";
+import { isInstagramStory } from "./instagram/instagram.js";
+import { isFacebookReel } from "./facebook/reels.js";
 import { React, ReactDOM } from "./react.js";
 import { useDownloadButtonInjection } from "./download-button.js";
 
@@ -114,7 +108,7 @@ async function downloadStory(story) {
     let ext = "mp4";
 
     if (isInstagramStory(story)) {
-      const video = document.querySelector("section video");
+      const video = document.querySelector("section video, article video, main video, div[aria-label='Reels Viewer'] video");
       if (video) {
         // Try finding the real URL in React Fiber props (traversing up)
         // @ts-ignore
@@ -173,7 +167,10 @@ async function downloadStory(story) {
       }
     } else {
       // Facebook fallback - Similar to Instagram, try Fiber first
-      const video = document.querySelector("video");
+      const isReel = isFacebookReel(story) || window.location.href.includes("/reel/");
+      const videoSelector = isReel ? 'div[role="main"] video, .x1useyqa video, .xpdmqnj video' : 'video';
+      const video = document.querySelector(videoSelector) || document.querySelector('video');
+
       if (video) {
         // @ts-ignore
         const fiberKey = Object.keys(video).find((k) =>
@@ -195,7 +192,9 @@ async function downloadStory(story) {
                 ?.data?.hdSrc ||
               props?.implementations?.[0]?.data?.hdSrc ||
               props?.videoData?.hdSrc ||
-              props?.videoData?.sdSrc;
+              props?.videoData?.sdSrc ||
+              props?.item?.video_versions?.[0]?.url ||
+              props?.video_versions?.[0]?.url;
 
             if (
               mediaUrl &&

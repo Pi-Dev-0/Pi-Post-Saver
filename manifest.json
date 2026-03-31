@@ -40,21 +40,16 @@
   "web_accessible_resources": [
     {
       "matches": [
-        "https://www.facebook.com/*",
+        "https://*.facebook.com/*",
+        "https://*.instagram.com/*",
         "https://facebook.com/*",
-        "https://web.facebook.com/*",
-        "https://m.facebook.com/*",
-        "https://www.instagram.com/*",
         "https://instagram.com/*"
       ],
       "resources": [
-        "extensions/app.js",
-        "extensions/download-button.js",
-        "extensions/graphql.js",
-        "extensions/react.js",
-        "extensions/story.js",
-        "node_modules/umd-react/dist/react-dom.production.min.js",
-        "node_modules/umd-react/dist/react.production.min.js"
+        "extensions/*.js",
+        "extensions/facebook/*.js",
+        "extensions/instagram/*.js",
+        "node_modules/umd-react/dist/*.js"
       ]
     }
   ]

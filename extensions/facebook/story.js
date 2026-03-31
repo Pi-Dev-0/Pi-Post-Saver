@@ -1,4 +1,5 @@
-import { graphqlListener, sendGraphqlRequest } from "./graphql.js";
+import { graphqlListener, sendGraphqlRequest } from "../graphql.js";
+import { isFacebookReel, fetchReelData, extractReelMedia } from "./reels.js";
 
 /**
  * @typedef {import('./types').Story} Story
@@ -15,9 +16,6 @@ import { graphqlListener, sendGraphqlRequest } from "./graphql.js";
  * @typedef {import('./types').Group} Group
  * @typedef {import('./types').StoryFile} StoryFile
  */
-
-const PHOTO_ROOT_QUERY = "CometPhotoRootContentQuery";
-const VIDEO_ROOT_QUERY = "CometVideoRootMediaViewerQuery";
 
 /** @type {Map<string, number>} */
 const storyCreateTimeCache = new Map();
@@ -95,7 +93,8 @@ function isMediaVideo(obj) {
     o.video_url ||
     o.videoDeliveryResponseFragment ||
     o.video_grid_renderer ||
-    o.video_versions
+    o.video_versions ||
+    o.progressive_urls
   );
 }
 
@@ -162,6 +161,7 @@ function getDownloadUrl(media) {
     }
 
     const list =
+      media?.progressive_urls ??
       media?.videoDeliveryResponseFragment?.videoDeliveryResponseResult
         ?.progressive_urls ??
       media?.video_grid_renderer?.video?.videoDeliveryResponseFragment
@@ -403,7 +403,85 @@ async function* fetchAttachments(story) {
           return;
         }
 
-        // Step 2: Try to extract from page DOM
+
+
+        // Step 2: Resolve via API using username/id from URL (Only if on Instagram)
+        if (window.location.hostname.includes("instagram.com")) {
+          const parts = window.location.pathname.split("/").filter(Boolean);
+          const isStoryPath = parts[0] === "stories";
+          const isPostPath =
+            parts[0] === "p" || parts[0] === "reel" || parts[0] === "reels";
+
+          if (isStoryPath) {
+            const isHighlight = parts[1] === "highlights";
+            const reelId = isHighlight
+              ? parts[2]
+              : /** @type {any} */ (s).reelId || null;
+            const mediaId = storyId !== reelId ? storyId : null;
+
+            if (reelId) {
+              try {
+                console.log(
+                  `[fpdl] Fetching highlight/reel API for ${reelId}...`,
+                );
+                const storyItems = await fetchInstagramHighlightData(reelId);
+                if (storyItems.length > 0) {
+                  const match = mediaId
+                    ? storyItems.find(
+                        (item) =>
+                          String(item.id).includes(String(mediaId)) ||
+                          String(item.pk).includes(String(mediaId)) ||
+                          (item.code && String(item.code) === String(mediaId)),
+                      )
+                    : storyItems[0];
+
+                  if (match) {
+                    yield match;
+                    return;
+                  }
+                  // If no specific match found but we have items, yield the first as fallback
+                  yield storyItems[0];
+                  return;
+                }
+              } catch (err) {
+                console.warn("[fpdl] Reel API resolution failed", err);
+              }
+            } else if (parts[1] && parts[1] !== "stories") {
+              try {
+                const userId = await resolveInstagramUserId(parts[1]);
+                const storyItems = await fetchInstagramStoryData(userId);
+                const match = storyItems.find(
+                  (item) =>
+                    String(item.id).includes(String(storyId)) ||
+                    String(item.pk).includes(String(storyId)) ||
+                    (item.code && String(item.code) === String(storyId)),
+                );
+                if (match) {
+                  yield match;
+                  return;
+                }
+                if (storyItems.length > 0) {
+                  yield storyItems[0];
+                  return;
+                }
+              } catch (err) {
+                console.warn("[fpdl] Story API resolution failed", err);
+              }
+            }
+          } else if (isPostPath) {
+            try {
+              const mediaInfo = await fetchInstagramMediaInfo(storyId);
+              if (mediaInfo) {
+                yield mediaInfo;
+                return;
+              }
+            } catch (err) {
+              console.warn("[fpdl] Media API resolution failed", err);
+            }
+          }
+        }
+
+        // Step 3: Try to extract from page DOM as a fallback
         const mediaSources = [];
         const containers = document.querySelectorAll(
           "article, section, div[role='dialog'], div[role='presentation']",
@@ -493,82 +571,6 @@ async function* fetchAttachments(story) {
           return;
         }
 
-        // Step 3: Resolve via API using username/id from URL (Only if on Instagram)
-        if (window.location.hostname.includes("instagram.com")) {
-          const parts = window.location.pathname.split("/").filter(Boolean);
-          const isStoryPath = parts[0] === "stories";
-          const isPostPath =
-            parts[0] === "p" || parts[0] === "reel" || parts[0] === "reels";
-
-          if (isStoryPath) {
-            const isHighlight = parts[1] === "highlights";
-            const reelId = isHighlight
-              ? parts[2]
-              : /** @type {any} */ (s).reelId || null;
-            const mediaId = storyId !== reelId ? storyId : null;
-
-            if (reelId) {
-              try {
-                console.log(
-                  `[fpdl] Fetching highlight/reel API for ${reelId}...`,
-                );
-                const storyItems = await fetchInstagramHighlightData(reelId);
-                if (storyItems.length > 0) {
-                  const match = mediaId
-                    ? storyItems.find(
-                        (item) =>
-                          String(item.id).includes(String(mediaId)) ||
-                          String(item.pk).includes(String(mediaId)) ||
-                          (item.code && String(item.code) === String(mediaId)),
-                      )
-                    : storyItems[0];
-
-                  if (match) {
-                    yield match;
-                    return;
-                  }
-                  // If no specific match found but we have items, yield the first as fallback
-                  yield storyItems[0];
-                  return;
-                }
-              } catch (err) {
-                console.warn("[fpdl] Reel API resolution failed", err);
-              }
-            } else if (parts[1] && parts[1] !== "stories") {
-              try {
-                const userId = await resolveInstagramUserId(parts[1]);
-                const storyItems = await fetchInstagramStoryData(userId);
-                const match = storyItems.find(
-                  (item) =>
-                    String(item.id).includes(String(storyId)) ||
-                    String(item.pk).includes(String(storyId)) ||
-                    (item.code && String(item.code) === String(storyId)),
-                );
-                if (match) {
-                  yield match;
-                  return;
-                }
-                if (storyItems.length > 0) {
-                  yield storyItems[0];
-                  return;
-                }
-              } catch (err) {
-                console.warn("[fpdl] Story API resolution failed", err);
-              }
-            }
-          } else if (isPostPath) {
-            try {
-              const mediaInfo = await fetchInstagramMediaInfo(storyId);
-              if (mediaInfo) {
-                yield mediaInfo;
-                return;
-              }
-            } catch (err) {
-              console.warn("[fpdl] Media API resolution failed", err);
-            }
-          }
-        }
-
         // Step 4: Fallback to direct page fetch (Only if on Instagram)
         if (
           window.location.hostname.includes("instagram.com") &&
@@ -629,20 +631,102 @@ async function* fetchAttachments(story) {
     try {
       console.log(`[fpdl] Fetching Facebook story data for ${story.id}...`);
 
-      // If we're on a story page, we might have the bucket ID in the URL
-      const match = window.location.href.match(/facebook\.com\/stories\/(\d+)/);
-      const bucketID = match ? match[1] : story.id;
-
-      const results = await sendGraphqlRequest({
-        apiName: "StoriesViewerBucketPrefetcherMultiBucketsQuery",
-        variables: { bucketIDs: [bucketID] },
-      });
-
+      // Bucket ID is the first numeric segment in /stories/{bucketID}/{storyID}
+      const urlMatch = window.location.href.match(
+        /facebook\.com\/stories\/([^/?#]+)(?:\/([^/?#]+))?/
+      );
+      const bucketID = story.bucketId || (urlMatch ? urlMatch[1] : story.id);
+      
+      const isReel = isFacebookReel(story) || window.location.href.includes("/reel/");
+      
+      let results;
       const extracted = [];
-      extractStories(results, extracted);
 
-      // Find the story that matches our placeholder ID
-      const matchStory = extracted.find((s) => getStoryId(s) === story.id);
+      if (isReel) {
+        results = await fetchReelData(bucketID);
+        if (results) extractReelMedia(results, extracted);
+      } else {
+        results = await sendGraphqlRequest({
+          apiName: "StoriesViewerBucketPrefetcherMultiBucketsQuery",
+          variables: { bucketIDs: [bucketID] },
+        });
+        extractStories(results, extracted);
+      }
+
+      /**
+       * Multi-strategy story matching.
+       * Facebook story IDs can appear in multiple formats:
+       *  - Exact string      : GraphQL id === placeholder id
+       *  - URL segment       : 2nd path segment of the story URL
+       *  - Base64 numeric    : placeholder is base64-encoded; inner numeric matches GraphQL id
+       *  - Substring         : one id is contained in the other
+       */
+
+      // Helper: extract numeric portion from a base64-encoded Facebook story ID.
+      // e.g. "UzpfSVNDOjE2MzM2NjY3NjEwOTYwMzQ=" -> "163366761096034"
+      const extractNumericFromBase64 = (/** @type {string} */ id) => {
+        try {
+          const decoded = atob(id.replace(/-/g, "+").replace(/_/g, "/"));
+          const m = decoded.match(/(\d{10,})/);
+          return m ? m[1] : null;
+        } catch {
+          return null;
+        }
+      };
+
+      const placeholderId = story.id;
+      let matchStory;
+
+      // Strategy 1: Exact ID match
+      matchStory = extracted.find((s) => getStoryId(s) === placeholderId);
+
+      // Strategy 2: Match against the story-specific URL segment (the part after /stories/{bucket}/)
+      if (!matchStory && urlStoryId && urlStoryId !== placeholderId) {
+        matchStory = extracted.find((s) => getStoryId(s) === urlStoryId);
+      }
+
+      // Strategy 3: Decode base64 placeholder ID and match numeric portion
+      if (!matchStory) {
+        const numericId = extractNumericFromBase64(placeholderId);
+        if (numericId) {
+          matchStory = extracted.find((s) => {
+            const sid = getStoryId(s);
+            return (
+              sid === numericId ||
+              sid.includes(numericId) ||
+              numericId.includes(sid)
+            );
+          });
+        }
+      }
+
+      // Strategy 4: Also try base64-decoding the URL story segment
+      if (!matchStory && urlStoryId) {
+        const numericId = extractNumericFromBase64(urlStoryId);
+        if (numericId) {
+          matchStory = extracted.find((s) => {
+            const sid = getStoryId(s);
+            return (
+              sid === numericId ||
+              sid.includes(numericId) ||
+              numericId.includes(sid)
+            );
+          });
+        }
+      }
+
+      // Strategy 5: Substring containment (one ID contains the other)
+      if (!matchStory) {
+        matchStory = extracted.find((s) => {
+          const sid = getStoryId(s);
+          return (
+            sid &&
+            placeholderId &&
+            (placeholderId.includes(sid) || sid.includes(placeholderId))
+          );
+        });
+      }
+
       if (matchStory) {
         console.log(
           `[fpdl] Found matching Facebook story ${story.id} in bucket ${bucketID}.`,
@@ -651,11 +735,20 @@ async function* fetchAttachments(story) {
         return;
       }
 
-      // If no exact match, but we found stories in this bucket, take the first one
-      if (extracted.length > 0) {
+      // Last resort: if only one story in the bucket, must be the right one
+      if (extracted.length === 1) {
         console.log(
-          `[fpdl] Exact match failed, yielding first story from bucket ${bucketID}.`,
+          `[fpdl] Single story in bucket ${bucketID}, yielding it.`,
         );
+        yield* fetchAttachments(extracted[0]);
+        return;
+      }
+
+      if (extracted.length > 0) {
+        console.warn(
+          `[fpdl] Story ID match failed for "${story.id}" in bucket ${bucketID} (${extracted.length} stories). Yielding first as fallback.`,
+        );
+        console.log(`[fpdl] Available IDs: ${extracted.map(getStoryId).join(", ")}`);
         yield* fetchAttachments(extracted[0]);
         return;
       }
@@ -1209,7 +1302,7 @@ export function getStoryUrl(story) {
     return `https://www.instagram.com/reels/${s.shortcode || s.id}/`;
   }
   if (isUnifiedStory(story)) {
-    const match = window.location.href.match(/facebook\.com\/stories\/(\d+)/);
+    const match = window.location.href.match(/facebook\.com\/stories\/([^/?]+)/);
     const bucketID = match ? match[1] : "";
     return `https://www.facebook.com/stories/${bucketID}/${story.id}/`;
   }
@@ -1469,8 +1562,7 @@ function isStoryWatch(obj) {
  * @returns {obj is StoryWatch}
  */
 export function isStoryReel(obj) {
-  if (!obj || typeof obj !== "object") return false;
-  return false;
+  return isFacebookReel(obj);
 }
 
 /**
@@ -1541,11 +1633,18 @@ function isUnifiedStory(obj) {
     return true;
   }
 
-  return (
-    (o.__typename === "Story" || o.__typename === "UnifiedStory") &&
+  if (
     typeof o.id === "string" &&
-    Array.isArray(o.attachments)
-  );
+    Array.isArray(o.attachments) &&
+    (o.__typename === "Story" || 
+     o.__typename === "UnifiedStory" || 
+     o.__typename === "XFBStoryCard" ||
+     "story_type" in o)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
