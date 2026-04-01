@@ -171,7 +171,8 @@ function injectPostFeedButtons(stories, downloadStory) {
   );
 
   for (const actionBtn of actionButtons) {
-    const overflowWrapper = actionBtn.closest('.x6s0dn4, .x78zum5') || actionBtn.parentElement;
+    const overflowWrapper =
+      actionBtn.closest(".x6s0dn4, .x78zum5") || actionBtn.parentElement;
     const buttonRow = overflowWrapper?.parentElement;
     if (!buttonRow) continue;
     if (buttonRow.querySelector(".fpdl-download-btn")) continue;
@@ -393,94 +394,111 @@ function injectInstagramButtons(stories, downloadStory) {
 
   const processedPosts = new Set();
 
-  const moreBtns = document.querySelectorAll('svg[aria-label="More options"], svg[aria-label="More"]');
+  const moreBtns = document.querySelectorAll(
+    'svg[aria-label="More options"], svg[aria-label="More"]',
+  );
   for (const moreSvg of moreBtns) {
-      const btnRole = moreSvg.closest('[role="button"]') || moreSvg.closest('button');
-      if (!btnRole) continue;
-      
-      const innerWrapper = btnRole.parentElement;
-      if (!innerWrapper) continue;
-      
-      const container = innerWrapper.parentElement;
-      if (!container) continue;
+    const btnRole =
+      moreSvg.closest('[role="button"]') || moreSvg.closest("button");
+    if (!btnRole) continue;
 
-      const post = container.closest('article, [role="dialog"], main') || container;
-      if (processedPosts.has(post)) continue;
-      
-      let shortcode;
-      const headerLinks = container.querySelectorAll('a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"]');
-      for (const link of headerLinks) {
-          const href = link.getAttribute('href') || '';
-          const match = href.match(/\/(?:p|reel|reels)\/(?!audio\/|videos\/)([A-Za-z0-9_-]+)/);
-          if (match && match[1]) {
-              shortcode = match[1];
-              break;
-          }
+    const innerWrapper = btnRole.parentElement;
+    if (!innerWrapper) continue;
+
+    const container = innerWrapper.parentElement;
+    if (!container) continue;
+
+    const post =
+      container.closest('article, [role="dialog"], main') || container;
+    if (processedPosts.has(post)) continue;
+
+    let shortcode;
+    const headerLinks = container.querySelectorAll(
+      'a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"]',
+    );
+    for (const link of headerLinks) {
+      const href = link.getAttribute("href") || "";
+      const match = href.match(
+        /\/(?:p|reel|reels)\/(?!audio\/|videos\/)([A-Za-z0-9_-]+)/,
+      );
+      if (match && match[1]) {
+        shortcode = match[1];
+        break;
       }
+    }
 
-      if (!shortcode && post !== container) {
-          const postLinks = post.querySelectorAll('a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"]');
-          for (const link of postLinks) {
-              const href = link.getAttribute('href') || '';
-              const match = href.match(/\/(?:p|reel|reels)\/(?!audio\/|videos\/)([A-Za-z0-9_-]+)/);
-              if (match && match[1]) {
-                  shortcode = match[1];
-                  break;
-              }
-          }
-      }
-
-      if (!shortcode) {
-          const match = window.location.pathname.match(/\/(?:reels|reel|p)\/([A-Za-z0-9_-]+)/);
-          if (match && isActiveReel(container)) shortcode = match[1];
-      }
-
-      if (!shortcode) continue;
-      processedPosts.add(post);
-
-      const story = stories.find((s) => getStoryPostId(s) === shortcode) || {
-        id: shortcode,
-        shortcode: shortcode,
-        __typename: "InstagramStory",
-        placeholder: true,
-      };
-
-      const existingBtns = post.querySelectorAll(".fpdl-download-btn");
-      let btnAlreadyExists = false;
-      for (const btn of existingBtns) {
-        if (btn.getAttribute("data-shortcode") === shortcode) {
-          const isPlaceholder = btn.dataset.placeholder === "true";
-          if (isPlaceholder && !story.placeholder) {
-            btn.remove();
-          } else {
-            btnAlreadyExists = true;
-          }
-        } else {
-          btn.remove();
+    if (!shortcode && post !== container) {
+      const postLinks = post.querySelectorAll(
+        'a[href*="/p/"], a[href*="/reel/"], a[href*="/reels/"]',
+      );
+      for (const link of postLinks) {
+        const href = link.getAttribute("href") || "";
+        const match = href.match(
+          /\/(?:p|reel|reels)\/(?!audio\/|videos\/)([A-Za-z0-9_-]+)/,
+        );
+        if (match && match[1]) {
+          shortcode = match[1];
+          break;
         }
       }
-      if (btnAlreadyExists) continue;
+    }
 
-      const downloadBtn = createDownloadButton(story, downloadStory);
-      downloadBtn.setAttribute("data-shortcode", shortcode);
-      if (story.placeholder) downloadBtn.dataset.placeholder = "true";
-      
-      const isSidebar = window.getComputedStyle(container).flexDirection === 'column' || container.classList.contains('x1247r65');
-      
-      if (isSidebar) {
-          downloadBtn.classList.add("fpdl-download-btn--instagram-reel");
-          const audio = container.querySelector('.xjwep3j, img[alt*="Audio"]');
-          if (audio) {
-              let target = audio;
-              while (target && target.parentElement !== container) target = target.parentElement;
-              container.insertBefore(downloadBtn, target || audio);
-          } else {
-              container.appendChild(downloadBtn);
-          }
+    if (!shortcode) {
+      const match = window.location.pathname.match(
+        /\/(?:reels|reel|p)\/([A-Za-z0-9_-]+)/,
+      );
+      if (match && isActiveReel(container)) shortcode = match[1];
+    }
+
+    if (!shortcode) continue;
+    processedPosts.add(post);
+
+    const story = stories.find((s) => getStoryPostId(s) === shortcode) || {
+      id: shortcode,
+      shortcode: shortcode,
+      __typename: "InstagramStory",
+      placeholder: true,
+    };
+
+    const existingBtns = post.querySelectorAll(".fpdl-download-btn");
+    let btnAlreadyExists = false;
+    for (const btn of existingBtns) {
+      if (btn.getAttribute("data-shortcode") === shortcode) {
+        const isPlaceholder = btn.dataset.placeholder === "true";
+        if (isPlaceholder && !story.placeholder) {
+          btn.remove();
+        } else {
+          btnAlreadyExists = true;
+        }
       } else {
-          downloadBtn.classList.add("fpdl-download-btn--instagram-header");
-          container.insertBefore(downloadBtn, innerWrapper);
+        btn.remove();
       }
+    }
+    if (btnAlreadyExists) continue;
+
+    const downloadBtn = createDownloadButton(story, downloadStory);
+    downloadBtn.setAttribute("data-shortcode", shortcode);
+    if (story.placeholder) downloadBtn.dataset.placeholder = "true";
+
+    const isSidebar =
+      window.getComputedStyle(container).flexDirection === "column" ||
+      container.classList.contains("x1247r65");
+
+    if (isSidebar) {
+      downloadBtn.classList.add("fpdl-download-btn--instagram-reel");
+      const audio = container.querySelector('.xjwep3j, img[alt*="Audio"]');
+      if (audio) {
+        let target = audio;
+        while (target && target.parentElement !== container)
+          target = target.parentElement;
+        container.insertBefore(downloadBtn, target || audio);
+      } else {
+        container.appendChild(downloadBtn);
+      }
+    } else {
+      downloadBtn.classList.add("fpdl-download-btn--instagram-header");
+      container.insertBefore(downloadBtn, innerWrapper);
+    }
   }
 }
 
@@ -499,17 +517,21 @@ function injectStoryButtons(stories, downloadStory) {
 
   // Strategy: Find anchors in the story viewer controls.
   // We prioritize Mute/Menu but must avoid the global Account Menu.
-  const anchors = document.querySelectorAll('div[aria-label="Mute"], div[aria-label="Menu"]');
+  const anchors = document.querySelectorAll(
+    'div[aria-label="Mute"], div[aria-label="Menu"]',
+  );
 
   for (const anchor of anchors) {
     // Only target anchors that are part of the visible story viewer
-    if (anchor.offsetHeight === 0 || anchor.closest('[hidden]')) continue;
+    if (anchor.offsetHeight === 0 || anchor.closest("[hidden]")) continue;
 
     // Skip the global menu in the top-right corner
-    if (anchor.closest('[aria-label="Account Controls and Settings"]')) continue;
+    if (anchor.closest('[aria-label="Account Controls and Settings"]'))
+      continue;
 
     // The controls are usually grouped in a container.
-    const controlBar = anchor.closest('.x78zum5.xtijo5x') || anchor.parentElement;
+    const controlBar =
+      anchor.closest(".x78zum5.xtijo5x") || anchor.parentElement;
     if (!controlBar) continue;
 
     // One button per controlBar is sufficient.
@@ -531,8 +553,15 @@ function injectStoryButtons(stories, downloadStory) {
     const isLikelyFbId = (val) => {
       if (!val || typeof val !== "string") return false;
       if (/^[a-zA-Z]+$/.test(val) && val.length < 20) return false;
-      if (val.includes("Pane") || val.includes("Button") || val.includes("Container")) return false;
-      return /^\d{10,}$/.test(val) || val.startsWith("Uzpf") || val.includes(":");
+      if (
+        val.includes("Pane") ||
+        val.includes("Button") ||
+        val.includes("Container")
+      )
+        return false;
+      return (
+        /^\d{10,}$/.test(val) || val.startsWith("Uzpf") || val.includes(":")
+      );
     };
 
     /**
@@ -557,9 +586,13 @@ function injectStoryButtons(stories, downloadStory) {
         if (!el) return null;
         return getValueFromReactFiber(el, (p) => {
           const bid =
-            p?.bucketID || p?.ownerID || p?.bucketId ||
-            p?.story?.owner?.id || p?.owner?.id ||
-            p?.bucket?.id || p?.bucket_id;
+            p?.bucketID ||
+            p?.ownerID ||
+            p?.bucketId ||
+            p?.story?.owner?.id ||
+            p?.owner?.id ||
+            p?.bucket?.id ||
+            p?.bucket_id;
 
           // Extended prop paths — different FB components use different names
           const sid =
@@ -594,8 +627,8 @@ function injectStoryButtons(stories, downloadStory) {
         controlBar.querySelector('div[aria-label="Menu"]'),
         anchor,
         // Story content (image / video)
-        document.querySelector('video'),
-        document.querySelector('[role="img"][aria-label]'),  // story image
+        document.querySelector("video"),
+        document.querySelector('[role="img"][aria-label]'), // story image
         // Progress bars (story position indicator)
         document.querySelector('[role="progressbar"]'),
         // Walk up from controlBar — story context may be a few levels up
@@ -608,16 +641,25 @@ function injectStoryButtons(stories, downloadStory) {
       for (const el of domCandidates) {
         const data = extractFiber(/** @type {Element} */ (el));
         if (data?.sid) {
-          console.log(`[fpdl] resolveCurrentStory: found via fiber on ${/** @type {Element} */(el)?.tagName ?? "el"}: ${data.sid}`);
+          console.log(
+            `[fpdl] resolveCurrentStory: found via fiber on ${/** @type {Element} */ (el)?.tagName ?? "el"}: ${data.sid}`,
+          );
           let bucketId = data.bid;
           if (!bucketId) {
-            const m = window.location.href.match(/facebook\.com\/stories\/([^/?#]+)/);
+            const m = window.location.href.match(
+              /facebook\.com\/stories\/([^/?#]+)/,
+            );
             if (m) bucketId = m[1];
           }
           const sStoryId = String(data.sid);
           const known = _currentStories.find((s) => getStoryId(s) === sStoryId);
           if (known) return known;
-          return { id: sStoryId, bucketId, __typename: "Story", placeholder: true };
+          return {
+            id: sStoryId,
+            bucketId,
+            __typename: "Story",
+            placeholder: true,
+          };
         }
       }
 
@@ -626,17 +668,29 @@ function injectStoryButtons(stories, downloadStory) {
       {
         const links = document.querySelectorAll('a[href*="/stories/"]');
         for (const link of links) {
-          if (/** @type {HTMLElement} */(link).offsetHeight === 0 &&
-              /** @type {HTMLElement} */(link).offsetWidth === 0) continue; // skip truly hidden
+          if (
+            /** @type {HTMLElement} */ (link).offsetHeight === 0 &&
+            /** @type {HTMLElement} */ (link).offsetWidth === 0
+          )
+            continue; // skip truly hidden
           const href = link.getAttribute("href") || "";
           const m = href.match(/\/stories\/([^/?#]+)\/([^/?#]+)/);
           if (m && isLikelyFbId(m[2])) {
             const bucketId = m[1];
             const storyId = decodeURIComponent(m[2]);
-            console.log(`[fpdl] resolveCurrentStory: found via DOM link: ${storyId}`);
-            const known = _currentStories.find((s) => getStoryId(s) === storyId);
+            console.log(
+              `[fpdl] resolveCurrentStory: found via DOM link: ${storyId}`,
+            );
+            const known = _currentStories.find(
+              (s) => getStoryId(s) === storyId,
+            );
             if (known) return known;
-            return { id: storyId, bucketId, __typename: "Story", placeholder: true };
+            return {
+              id: storyId,
+              bucketId,
+              __typename: "Story",
+              placeholder: true,
+            };
           }
         }
       }
@@ -647,7 +701,9 @@ function injectStoryButtons(stories, downloadStory) {
       // If we know the ordered list of stories for this bucket, we can match
       // by index.
       {
-        const urlM = window.location.href.match(/facebook\.com\/stories\/([^/?#]+)/);
+        const urlM = window.location.href.match(
+          /facebook\.com\/stories\/([^/?#]+)/,
+        );
         const bucketId = urlM ? urlM[1] : null;
 
         if (bucketId && stories.length > 0) {
@@ -662,7 +718,7 @@ function injectStoryButtons(stories, downloadStory) {
           });
 
           const progressBars = Array.from(
-            document.querySelectorAll('[role="progressbar"]')
+            document.querySelectorAll('[role="progressbar"]'),
           );
 
           if (progressBars.length > 0) {
@@ -673,8 +729,7 @@ function injectStoryButtons(stories, downloadStory) {
               const bar = progressBars[i];
               const inner = bar.querySelector("[style]");
               const widthStr =
-                inner?.style?.width ||
-                window.getComputedStyle(bar).width;
+                inner?.style?.width || window.getComputedStyle(bar).width;
               const pct = parseFloat(widthStr);
               // Heuristic: the first bar that is > 0% and < 100% is the active one.
               // If all are 0 the first is active; if all done the last is active.
@@ -686,23 +741,38 @@ function injectStoryButtons(stories, downloadStory) {
             if (activeIdx === -1) {
               // Check aria-valuenow
               for (let i = 0; i < progressBars.length; i++) {
-                const now = parseFloat(progressBars[i].getAttribute("aria-valuenow") || "0");
-                const max = parseFloat(progressBars[i].getAttribute("aria-valuemax") || "100");
-                if (now > 0 && now < max) { activeIdx = i; break; }
+                const now = parseFloat(
+                  progressBars[i].getAttribute("aria-valuenow") || "0",
+                );
+                const max = parseFloat(
+                  progressBars[i].getAttribute("aria-valuemax") || "100",
+                );
+                if (now > 0 && now < max) {
+                  activeIdx = i;
+                  break;
+                }
               }
             }
             // Default to the last bar whose aria-valuenow > 0
             if (activeIdx === -1) {
               for (let i = progressBars.length - 1; i >= 0; i--) {
-                const now = parseFloat(progressBars[i].getAttribute("aria-valuenow") || "0");
-                if (now > 0) { activeIdx = i; break; }
+                const now = parseFloat(
+                  progressBars[i].getAttribute("aria-valuenow") || "0",
+                );
+                if (now > 0) {
+                  activeIdx = i;
+                  break;
+                }
               }
             }
 
-            const targetList = bucketStories.length > 0 ? bucketStories : stories;
+            const targetList =
+              bucketStories.length > 0 ? bucketStories : stories;
             if (activeIdx >= 0 && activeIdx < targetList.length) {
               const s = targetList[activeIdx];
-              console.log(`[fpdl] resolveCurrentStory: found via progress bar [${activeIdx}]: ${getStoryId(s)}`);
+              console.log(
+                `[fpdl] resolveCurrentStory: found via progress bar [${activeIdx}]: ${getStoryId(s)}`,
+              );
               return s;
             }
           }
@@ -713,19 +783,28 @@ function injectStoryButtons(stories, downloadStory) {
       // The URL may be stale (always shows first story), but it's better than nothing.
       {
         const urlM = window.location.href.match(
-          /facebook\.com\/stories\/([^/?#]+)(?:\/([^/?#]+))?/
+          /facebook\.com\/stories\/([^/?#]+)(?:\/([^/?#]+))?/,
         );
         if (urlM) {
           const bucketId = urlM[1];
           const storyId = urlM[2] ? decodeURIComponent(urlM[2]) : urlM[1];
-          console.warn(`[fpdl] resolveCurrentStory: falling back to URL (may be stale): ${storyId}`);
+          console.warn(
+            `[fpdl] resolveCurrentStory: falling back to URL (may be stale): ${storyId}`,
+          );
           const known = _currentStories.find((s) => getStoryId(s) === storyId);
           if (known) return known;
-          return { id: storyId, bucketId, __typename: "Story", placeholder: true };
+          return {
+            id: storyId,
+            bucketId,
+            __typename: "Story",
+            placeholder: true,
+          };
         }
       }
 
-      console.warn("[fpdl] resolveCurrentStory: all strategies exhausted, cannot resolve story.");
+      console.warn(
+        "[fpdl] resolveCurrentStory: all strategies exhausted, cannot resolve story.",
+      );
       return null;
     };
 
@@ -757,7 +836,9 @@ function injectStoryButtons(stories, downloadStory) {
         if (story) {
           await downloadStory(story);
         } else {
-          console.warn("[fpdl] Cannot download: could not resolve the currently visible story.");
+          console.warn(
+            "[fpdl] Cannot download: could not resolve the currently visible story.",
+          );
         }
       } catch (err) {
         console.warn("[fpdl] Story download failed", err);
@@ -779,20 +860,26 @@ function injectStoryButtons(stories, downloadStory) {
  * @param {(story: Story) => Promise<void>} downloadStory
  */
 function injectInstagramStoryButtons(stories, downloadStory) {
-  if (!window.location.hostname.includes("instagram.com") || !window.location.href.includes("/stories/")) return;
+  if (
+    !window.location.hostname.includes("instagram.com") ||
+    !window.location.href.includes("/stories/")
+  )
+    return;
 
   // Target the "Menu" button in the story header
-  const menuBtn = document.querySelector('section svg[aria-label="Menu"]')?.closest('[role="button"]');
+  const menuBtn = document
+    .querySelector('section svg[aria-label="Menu"]')
+    ?.closest('[role="button"]');
   if (!menuBtn) return;
 
   const headerTray = menuBtn.parentElement;
   if (!headerTray) return;
 
   // Extract IDs from URL: /stories/username/storyId/ or /stories/highlights/REEL_ID/
-  const parts = window.location.pathname.split('/').filter(Boolean);
+  const parts = window.location.pathname.split("/").filter(Boolean);
   const urlParams = new URLSearchParams(window.location.search);
-  const mediaIdFromUrl = urlParams.get('media_id');
-  
+  const mediaIdFromUrl = urlParams.get("media_id");
+
   const isHighlight = parts[1] === "highlights";
   const reelId = isHighlight ? parts[2] : null;
   const storyIdFromPath = isHighlight ? null : parts[2];
@@ -800,7 +887,9 @@ function injectInstagramStoryButtons(stories, downloadStory) {
 
   if (!storyId) return;
 
-  const existingBtn = headerTray.querySelector(".fpdl-download-btn-insta-story");
+  const existingBtn = headerTray.querySelector(
+    ".fpdl-download-btn-insta-story",
+  );
   if (existingBtn) {
     if (existingBtn.getAttribute("data-story-id") === storyId) {
       return;
@@ -819,12 +908,12 @@ function injectInstagramStoryButtons(stories, downloadStory) {
   const downloadBtn = createDownloadButton(story, downloadStory);
   downloadBtn.classList.add("fpdl-download-btn-insta-story");
   downloadBtn.setAttribute("data-story-id", storyId);
-  
+
   // Apply classes from the Menu button to match styling exactly
   if (menuBtn.className) {
     downloadBtn.className += " " + menuBtn.className;
   }
-  
+
   // Ensure it has the correct sizing and layout
   downloadBtn.style.display = "flex";
   downloadBtn.style.alignItems = "center";

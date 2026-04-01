@@ -44,8 +44,8 @@ function scrapeInstagramMediaFromDOM(storyId) {
               props?.videoData?.$1?.hd_src ||
               props?.videoData?.$1?.playable_url ||
               props?.videoData?.$1?.sd_src ||
-              props?.children?.props?.children?.props
-                ?.implementations?.[0]?.data?.hdSrc ||
+              props?.children?.props?.children?.props?.implementations?.[0]
+                ?.data?.hdSrc ||
               props?.videoData?.hdSrc ||
               props?.videoData?.sdSrc ||
               props?.item?.video_versions?.[0]?.url ||
@@ -139,9 +139,7 @@ export async function* resolveInstagramPlaceholder(story, globalStoriesCache) {
 
     if (isStoryPath) {
       const isHighlight = parts[1] === "highlights";
-      const reelId = isHighlight
-        ? parts[2]
-        : story.reelId || null;
+      const reelId = isHighlight ? parts[2] : story.reelId || null;
       const mediaId = storyId !== reelId ? storyId : null;
 
       if (reelId) {
@@ -151,12 +149,16 @@ export async function* resolveInstagramPlaceholder(story, globalStoriesCache) {
           const storyItems = await fetchInstagramHighlightData(reelId);
           if (storyItems.length > 0) {
             // Try to identify which item is currently visible
-            const urlMediaId = new URLSearchParams(window.location.search).get("media_id");
+            const urlMediaId = new URLSearchParams(window.location.search).get(
+              "media_id",
+            );
             const activeVideo = document.querySelector(
               "section video, div[role='dialog'] video",
             );
             const activeDataId =
-              activeVideo?.closest("[data-media-id]")?.getAttribute("data-media-id") ||
+              activeVideo
+                ?.closest("[data-media-id]")
+                ?.getAttribute("data-media-id") ||
               activeVideo?.closest("[data-id]")?.getAttribute("data-id");
 
             const activeId = urlMediaId || activeDataId || mediaId;
@@ -239,11 +241,19 @@ export async function* resolveInstagramPlaceholder(story, globalStoriesCache) {
         const ogVideo = doc.querySelector('meta[property="og:video"]');
         const ogImage = doc.querySelector('meta[property="og:image"]');
         if (ogVideo?.content) {
-          yield { __typename: "Video", id: storyId, video_url: ogVideo.content };
+          yield {
+            __typename: "Video",
+            id: storyId,
+            video_url: ogVideo.content,
+          };
           return;
         }
         if (ogImage?.content) {
-          yield { __typename: "Photo", id: storyId, display_url: ogImage.content };
+          yield {
+            __typename: "Photo",
+            id: storyId,
+            display_url: ogImage.content,
+          };
           return;
         }
       }
