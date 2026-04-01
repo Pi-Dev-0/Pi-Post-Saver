@@ -1,6 +1,6 @@
 <p align="center">
-  <img src="images/logo.png" width="100" alt="Social Post Downloader Logo">
-  <h1 align="center">Social Post Downloader</h1>
+  <img src="images/logo.png" width="100" alt="Pi Post Saver Logo">
+  <h1 align="center">Pi Post Saver</h1>
   <p align="center">
     <strong>The ultimate tool for downloading high-quality content from Facebook and Instagram.</strong>
   </p>

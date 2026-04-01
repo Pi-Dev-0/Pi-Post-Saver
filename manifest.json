@@ -5,7 +5,7 @@
       "16": "images/logo.png",
       "48": "images/logo.png"
     },
-    "default_title": "Facebook Post Downloader"
+    "default_title": "Pi Post Saver"
   },
   "background": {
     "service_worker": "extensions/background.js",
