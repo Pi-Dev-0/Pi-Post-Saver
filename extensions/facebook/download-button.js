@@ -71,6 +71,13 @@ export function injectVideoFeedButtons(stories, downloadStory) {
   const actionButtons = document.querySelectorAll('[aria-label="More"]');
 
   for (const actionBtn of actionButtons) {
+    // Skip "More" buttons that are inside comment sections or reaction popups
+    if (
+      actionBtn.closest('[role="article"]') ||
+      actionBtn.closest('[aria-label^="Comment by"]') ||
+      actionBtn.closest('[role="dialog"]')
+    ) continue;
+
     const moreButtonWrapper = actionBtn.parentElement;
     const buttonRow = moreButtonWrapper?.parentElement;
     if (!buttonRow) continue;
@@ -173,6 +180,26 @@ export function injectReelsButtons(stories, downloadStory) {
     const anchorBtn = shareBtn || commentBtn || likeBtn;
 
     if (!anchorBtn) continue;
+
+    // ── Guard: skip buttons inside comment sections ───────────────────────
+    // Facebook comment articles have role="article" and aria-label starting with "Comment by".
+    // Reply threads also carry role="article". We must not inject into either.
+    if (
+      anchorBtn.closest('[role="article"]') ||
+      anchorBtn.closest('[aria-label^="Comment by"]') ||
+      anchorBtn.closest('[aria-label^="Reply by"]')
+    ) continue;
+
+    // ── Guard: skip buttons inside reaction/interaction popup boxes ───────
+    // The emoji reaction tray and interaction popups appear in overlays/dialogs
+    // or inside containers that hold reaction emoji buttons (Care, Love, etc.).
+    if (
+      anchorBtn.closest('[role="dialog"]') ||
+      anchorBtn.closest('[aria-label="React"]') ||
+      anchorBtn.closest('[aria-label="Reactions"]') ||
+      anchorBtn.closest('[aria-label^="See who reacted"]') ||
+      anchorBtn.closest('.x6s0dn4.x3nfvp2') // reaction emoji tray wrapper
+    ) continue;
 
     // Find the actual reel root so we don't inject multiple times per reel
     // We use .parentElement.closest() because Facebook action buttons sometimes 
