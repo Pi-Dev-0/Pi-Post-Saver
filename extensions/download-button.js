@@ -329,6 +329,41 @@ function injectDownloadButtonStyles() {
 }
 
 /**
+ * Initialize SPA URL-change detection in the main page world.
+ * Facebook uses React Router, so we monkeypatch history.pushState and replaceState
+ * to detect when the user navigates (e.g. from Home to a specific Reel) without
+ * a full page reload, and dispatch our custom 'fpdl_urlchange' event.
+ */
+function initSpaNavigationTracker() {
+  if (window.__fpdl_spa_tracker_initialized) return;
+  window.__fpdl_spa_tracker_initialized = true;
+
+  function dispatchUrlChange() {
+    window.dispatchEvent(new Event("fpdl_urlchange"));
+    // Fire again after delays because React might take time to fetch and render the new page's DOM
+    setTimeout(() => window.dispatchEvent(new Event("fpdl_urlchange")), 1000);
+    setTimeout(() => window.dispatchEvent(new Event("fpdl_urlchange")), 2000);
+  }
+
+  const _pushState = history.pushState.bind(history);
+  history.pushState = function (...args) {
+    _pushState(...args);
+    dispatchUrlChange();
+  };
+
+  const _replaceState = history.replaceState.bind(history);
+  history.replaceState = function (...args) {
+    _replaceState(...args);
+    dispatchUrlChange();
+  };
+
+  window.addEventListener("popstate", dispatchUrlChange);
+}
+
+// Run the tracker initialization as soon as this module loads
+initSpaNavigationTracker();
+
+/**
  * React hook to inject download buttons into posts.
  * @param {Story[]} stories
  * @param {(story: Story) => Promise<void>} downloadStory
@@ -345,7 +380,7 @@ export function useDownloadButtonInjection(stories, downloadStory) {
   useEffect(() => {
     const { call: inject, cancel } = debounce(
       () => injectDownloadButtons(stories, downloadStory),
-      100,
+      250, // slightly longer debounce helps batch React's async renders
     );
 
     const observer = new MutationObserver(inject);

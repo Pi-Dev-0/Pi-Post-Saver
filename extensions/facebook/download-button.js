@@ -213,7 +213,6 @@ export function injectReelsButtons(stories, downloadStory) {
     // The emoji reaction tray and interaction popups appear in overlays/dialogs
     // or inside containers that hold reaction emoji buttons (Care, Love, etc.).
     if (
-      anchorBtn.closest('[role="dialog"]') ||
       anchorBtn.closest('[aria-label="React"]') ||
       anchorBtn.closest('[aria-label="Reactions"]') ||
       anchorBtn.closest('[aria-label^="See who reacted"]') ||
