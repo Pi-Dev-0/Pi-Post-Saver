@@ -29,6 +29,25 @@ export function injectPostFeedButtons(stories, downloadStory) {
     if (!buttonRow) continue;
     if (buttonRow.querySelector(".fpdl-download-btn")) continue;
 
+    // ── Guard: skip non-post widgets (e.g. "People you may know", "Reels") ──
+    // These widgets embed an "Actions for this post" button in their section
+    // header, but the surrounding DOM contains h3 headings or content-specific
+    // links (friend suggestions, reel links) that never appear in a real post's
+    // action row. The Reels widget h3 is one level above buttonRow, so we also
+    // check buttonRow.parentElement.
+    const widgetContainer = buttonRow.parentElement;
+    if (
+      buttonRow.querySelector("h3") ||
+      widgetContainer?.querySelector("h3") ||
+      buttonRow.querySelector('[href*="/friends/suggestions/"]') ||
+      buttonRow.querySelector('[aria-label^="Add Friend"]') ||
+      widgetContainer?.querySelector('[href*="/reel/"]') ||
+      widgetContainer?.querySelector('[aria-label^="Reel by"]') ||
+      actionBtn.closest('[aria-label="People you may know"]') ||
+      actionBtn.closest('[aria-label="Reels"]') ||
+      actionBtn.closest('[role="region"]')
+    ) continue;
+
     let story = findStoryForButton(actionBtn, stories);
     
     if (!story) {
