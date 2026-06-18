@@ -1287,7 +1287,7 @@ export async function* fetchStoryFiles(story) {
 
     mediaIndex++;
     const indexPrefix = String(mediaIndex).padStart(4, "0");
-    const filename = `${folder}/${indexPrefix}_${media.id}.${download.ext}`;
+    const filename = `${folder}_${indexPrefix}_${media.id}.${download.ext}`;
     yield { storyId, url: download.url, filename };
   }
 
@@ -1298,7 +1298,7 @@ export async function* fetchStoryFiles(story) {
 
       mediaIndex++;
       const indexPrefix = String(mediaIndex).padStart(4, "0");
-      const filename = `${folder}/${indexPrefix}_${media.id}.${download.ext}`;
+      const filename = `${folder}_${indexPrefix}_${media.id}.${download.ext}`;
       yield { storyId, url: download.url, filename };
     }
   }
