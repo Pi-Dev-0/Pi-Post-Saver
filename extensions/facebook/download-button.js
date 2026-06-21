@@ -94,12 +94,7 @@ export function injectVideoFeedButtons(stories, downloadStory) {
     if (
       actionBtn.closest('[role="article"]') ||
       actionBtn.closest('[aria-label^="Comment by"]') ||
-      actionBtn.closest('[role="dialog"]') ||
-      actionBtn.closest('[role="complementary"]') ||
-      actionBtn.closest('[aria-label="Comments"]') ||
-      actionBtn.closest('[aria-label^="Comments on"]') ||
-      actionBtn.closest('[aria-label="Comment list"]') ||
-      actionBtn.closest('[aria-label="Comment thread"]')
+      actionBtn.closest('[role="dialog"]')
     ) continue;
 
     const moreButtonWrapper = actionBtn.parentElement;
@@ -139,17 +134,6 @@ export function injectWatchVideoButtons(stories, downloadStory) {
     const buttonWrapper = actionBtn.parentElement;
     const buttonRow = buttonWrapper?.parentElement;
     if (!buttonRow) continue;
-
-    // Skip if inside comment sections or complementary panels
-    if (
-      actionBtn.closest('[role="article"]') ||
-      actionBtn.closest('[aria-label^="Comment by"]') ||
-      actionBtn.closest('[role="complementary"]') ||
-      actionBtn.closest('[aria-label="Comments"]') ||
-      actionBtn.closest('[aria-label^="Comments on"]') ||
-      actionBtn.closest('[aria-label="Comment list"]') ||
-      actionBtn.closest('[aria-label="Comment thread"]')
-    ) continue;
 
     const urlParams = new URLSearchParams(window.location.search);
     const urlVideoId = urlParams.get("v");
@@ -196,13 +180,7 @@ export function injectWatchVideoButtons(stories, downloadStory) {
  * @param {(story: Story) => Promise<void>} downloadStory
  */
 export function injectReelsButtons(stories, downloadStory) {
-  const isReelPage = window.location.pathname.includes("/reel/") || window.location.pathname.includes("/reels/");
-  const hasReelsViewer = document.querySelector("div[aria-label='Reels Viewer']");
-
-  // Guard: only run Reels injection on Reels pages or when the Reels viewer modal is active.
-  // This prevents incorrect injection on standard feed posts, pages, and comment sections.
-  if (!isReelPage && !hasReelsViewer) return;
-
+  const isReelPage = window.location.pathname.includes("/reel/");
   const match = window.location.pathname.match(/\/reel\/(\d+)/);
   const reelId = match ? match[1] : null;
 
@@ -225,16 +203,10 @@ export function injectReelsButtons(stories, downloadStory) {
     // ── Guard: skip buttons inside comment sections ───────────────────────
     // Facebook comment articles have role="article" and aria-label starting with "Comment by".
     // Reply threads also carry role="article". We must not inject into either.
-    // Also skip buttons inside the comment sidebar/panel/drawer.
     if (
       anchorBtn.closest('[role="article"]') ||
       anchorBtn.closest('[aria-label^="Comment by"]') ||
-      anchorBtn.closest('[aria-label^="Reply by"]') ||
-      anchorBtn.closest('[role="complementary"]') ||
-      anchorBtn.closest('[aria-label="Comments"]') ||
-      anchorBtn.closest('[aria-label^="Comments on"]') ||
-      anchorBtn.closest('[aria-label="Comment list"]') ||
-      anchorBtn.closest('[aria-label="Comment thread"]')
+      anchorBtn.closest('[aria-label^="Reply by"]')
     ) continue;
 
     // ── Guard: skip buttons inside reaction/interaction popup boxes ───────
